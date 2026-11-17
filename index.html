@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gymteca</title>
+<meta name="robots" content="noindex">
+<link rel="canonical" href="https://gymteca.com/">
+<meta name="theme-color" content="#0b1514">
+<style>
+html,body{min-height:100%;margin:0}
+body{background:#0b1514;color:#eef6f4;font:17px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;text-align:center;padding:28px 24px;box-sizing:border-box;min-height:100vh}
+main{max-width:26em}
+h1{font-size:26px;line-height:1.2;letter-spacing:-.4px;margin:0 0 12px}
+p{margin:0 0 10px;color:#86a19c}
+.b{display:block;width:100%;box-sizing:border-box;margin-top:14px;font:600 16px/1 inherit;font-family:inherit;text-decoration:none;padding:16px 24px;border-radius:999px;border:1px solid rgba(238,246,244,.18);background:transparent;color:#eef6f4;cursor:pointer}
+.b.p{background:#4fe3c1;border-color:#4fe3c1;color:#062320}
+#ok{color:#4fe3c1;min-height:1.5em;margin-top:14px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <!-- Sin datos guardados en este dispositivo: se va solo a la portada -->
+  <div id="adios">
+    <p>Gymteca llegará al iPhone, en el App Store.</p>
+    <a class="b p" href="https://gymteca.com/">Ir a gymteca.com</a>
+  </div>
+  <!-- Con entrenos guardados aquí: antes de irse, la copia -->
+  <div id="rescate" hidden>
+    <h1>Gymteca ya no está en la web</h1>
+    <p>La app llegará al iPhone, en el App Store. En este dispositivo hay entrenos guardados: <strong id="cuanto" style="color:#eef6f4"></strong>.</p>
+    <p>Guarda una copia antes de irte. Es el mismo archivo que «Guardar copia» de Ajustes.</p>
+    <button class="b p" type="button" id="guardar">Guardar copia de mis datos</button>
+    <a class="b" href="https://gymteca.com/">Ir a gymteca.com</a>
+    <p id="ok" role="status"></p>
+  </div>
+</main>
+<script>
+// Gymteca ya no se ofrece en esta dirección. Esta página quita el service worker y las cachés que pudieran quedar y
+// lleva a la portada. Si en este dispositivo hay entrenos guardados (localStorage «gymtrack_v3»), no se va sola: ofrece
+// descargarlos. Nunca borra ni envía esos datos: no salen del dispositivo.
+(function () {
+  var DESTINO = 'https://gymteca.com/', CLAVE = 'gymtrack_v3';
+  var est = null;
+  try { est = JSON.parse(localStorage.getItem(CLAVE)); } catch (e) { est = null; }
+  var nS = est && Array.isArray(est.sessions) ? est.sessions.length : 0, nW = est && Array.isArray(est.weights) ? est.weights.length : 0;
+  var hayDatos = nS + nW > 0;
+
+  function limpia() {
+    try {
+      if (!('serviceWorker' in navigator)) return Promise.resolve();
+      return navigator.serviceWorker.getRegistrations()
+        .then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); })
+        .catch(function () {})
+        .then(function () {
+          if (!window.caches || !caches.keys) return;
+          return caches.keys().then(function (ks) {
+            return Promise.all(ks.filter(function (k) { return k.indexOf('gymteca-') === 0; }).map(function (k) { return caches.delete(k); }));
+          });
+        })
+        .catch(function () {});
+    } catch (e) { return Promise.resolve(); }
+  }
+
+  if (!hayDatos) {
+    var ido = false, ir = function () { if (ido) return; ido = true; location.replace(DESTINO); };
+    setTimeout(ir, 2500); // pase lo que pase
+    limpia().then(ir);
+    return;
+  }
+
+  document.getElementById('adios').hidden = true;
+  document.getElementById('rescate').hidden = false;
+  document.getElementById('cuanto').textContent = nS + (nS === 1 ? ' sesión' : ' sesiones') + ' y ' + nW + (nW === 1 ? ' peso' : ' pesos');
+  limpia();
+  document.getElementById('guardar').addEventListener('click', function () {
+    var ok = document.getElementById('ok');
+    try {
+      // Lo mismo que guarda la app: el estado, sin las claves de pantalla ni el descanso en marcha, con fecha y versión
+      var p = {}; Object.keys(est).forEach(function (k) { if (k.charAt(0) !== '_' && k !== 'restTimer') p[k] = est[k]; });
+      p._exported = new Date().toISOString(); p._version = +est.schema_version || 0;
+      var url = URL.createObjectURL(new Blob([JSON.stringify(p, null, 2)], { type: 'application/json' }));
+      var a = document.createElement('a'); a.href = url; a.download = 'gymteca-copia-' + new Date().toISOString().slice(0, 10) + '.json';
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
+      ok.textContent = 'Copia descargada. Guárdala también fuera del móvil.';
+    } catch (e) { ok.textContent = 'No se pudo descargar. Escribe a soporte@gymteca.com.'; }
+  });
+})();
+</script>
+</body>
+</html>
